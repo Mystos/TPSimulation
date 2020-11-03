@@ -4,11 +4,11 @@ using UnityEngine;
 
 public class Point : MonoBehaviour
 {
-    public Vector3 pos;
-    public Vector3 v;
-    public Vector3 a;
-    public float m;
-    public float cd;
-    public float h;
-    public Vector3 prevPos;
+    internal Vector3 pos;
+    internal Vector3 v;
+    internal Vector3 a;
+    internal float m;
+    internal float cd;
+    internal float h;
+    internal Vector3 prevPos;
 }

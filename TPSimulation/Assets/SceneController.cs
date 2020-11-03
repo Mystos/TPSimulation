@@ -7,7 +7,7 @@ public class SceneController : MonoBehaviour
     public float g = 9.8f; // Gravité
     public Vector3 Y = new Vector3(0, -1, 0);
     public GameObject pointsContainer;
-    public List<GameObject> listPoint;
+    public List<Point> listPoint;
     public GameObject pointPrefab;
     public int nbrPoint;
     public float x;
@@ -18,7 +18,6 @@ public class SceneController : MonoBehaviour
     public float massMin;
     public float massMax;
     public float r0;
-    public float rnear;
     public float pnear;
     public float foutside;
 
@@ -36,15 +35,14 @@ public class SceneController : MonoBehaviour
         Debug.DrawLine(new Vector3(x, 0), new Vector3(x,y));
         Debug.DrawLine(new Vector3(0, y), new Vector3(x,y));
 
-
         // Spatial hashing
         SpatialHash2D sh2d = new SpatialHash2D(x, y, h);
-        foreach (GameObject point in listPoint)
+        foreach (Point point in listPoint)
         {
             sh2d.Insert(point);
         }
 
-        PVFS(listPoint, sh2d, g, Y, x, y, k, knear, pnear, rnear, h, r0, foutside);
+        PVFS(listPoint, sh2d, g, Y, x, y, k, knear, pnear, h, r0, foutside);
     }
 
     #region Fonction Calcules
@@ -83,19 +81,17 @@ public class SceneController : MonoBehaviour
             float rangedMass = (((point.m - massMin)) / (massMax - massMin));
             Color current = Color.Lerp(low, high, rangedMass);
             instance.GetComponent<SpriteRenderer>().color = current;
-            listPoint.Add(instance);
+            listPoint.Add(point);
         }
     }
 
 
-    public static void PVFS(List<GameObject> listPoint, SpatialHash2D sh2d, float g, Vector3 Y, float boundaryX, float boundaryY, float k, float knear, float pnear, float rnear, float h, float r0, float foutside)
+    public static void PVFS(List<Point> listPoint, SpatialHash2D sh2d, float g, Vector3 Y, float boundaryX, float boundaryY, float k, float knear, float pnear, float h, float r0, float foutside)
     {
-        foreach (GameObject item in listPoint)
+        foreach (Point point in listPoint)
         {
             // Apply gravity
-            Point point = item.GetComponent<Point>();
-            Transform transform = item.GetComponent<Transform>();
-            point.pos = transform.position;
+            point.pos = point.transform.position;
 
             point.v = Vdt(point.m, g, point.cd, Y, point.v);
 
@@ -104,27 +100,6 @@ public class SceneController : MonoBehaviour
 
             // advance to predicted position
             point.pos = Pdt(point.v, point.pos);
-            transform.position = point.pos;
-
-
-            // Clamp
-            if (point.pos.y < 0)
-            {
-                point.pos += Vector3.up * (new Vector3(point.pos.x, 0) - point.pos).magnitude * foutside * (Time.fixedDeltaTime * Time.fixedDeltaTime) / point.m;
-            }
-            if (point.pos.y > boundaryY)
-            {
-                point.pos += Vector3.down * (new Vector3(point.pos.x, boundaryY) - point.pos).magnitude * foutside * (Time.fixedDeltaTime * Time.fixedDeltaTime) / point.m;
-            }
-            if (point.pos.x < 0)
-            {
-                point.pos += Vector3.right * (new Vector3(0, point.pos.y) - point.pos).magnitude * foutside * (Time.fixedDeltaTime * Time.fixedDeltaTime) / point.m;
-            }
-            if (point.pos.x > boundaryX)
-            {
-                point.pos += Vector3.left * (new Vector3(boundaryX, point.pos.y) - point.pos).magnitude * foutside * (Time.fixedDeltaTime * Time.fixedDeltaTime) / point.m;
-            }
-
         }
 
         // modify velocities with pairwise viscosity impulses
@@ -139,21 +114,19 @@ public class SceneController : MonoBehaviour
         //  applySpringDisplacements
 
         //  doubleDensityRelaxation
-        foreach (GameObject i in listPoint)
+        foreach (Point pointI in listPoint)
         {
-            Point pointI = i.GetComponent<Point>();
-            Transform transformI = i.GetComponent<Transform>();
             float r = 0;
+            float rnear = 0;
             float p;
             float q;
             Vector3 dirIJ;
             // compute density and near-density
 
-            List<GameObject> neighborhood = sh2d.GetNearby(i);
+            List<Point> neighborhood = sh2d.GetNearby(pointI);
 
-            foreach (GameObject j in neighborhood)
+            foreach (Point pointJ in neighborhood)
             {
-                Point pointJ = j.GetComponent<Point>();
                 dirIJ = pointJ.pos - pointI.pos;
                 q = dirIJ.magnitude / h;
 
@@ -171,30 +144,48 @@ public class SceneController : MonoBehaviour
 
             Vector3 dx = Vector3.zero;
 
-            foreach (GameObject j in neighborhood)
+            foreach (Point pointJ in neighborhood)
             {
-                Point pointJ = j.GetComponent<Point>();
-                Transform transformJ = j.GetComponent<Transform>();
                 dirIJ = pointJ.pos - pointI.pos;
                 q = dirIJ.magnitude / h;
 
                 if (q < 1)
                 {
                     Vector3 D = (Time.fixedDeltaTime * Time.fixedDeltaTime) / pointI.m * (p * (1 - q) + pnear * Mathf.Pow(1 - q, 2)) * dirIJ.normalized;
-                    transformJ.position = pointJ.pos + D / 2;
+                    pointJ.pos += D / 2;
                     dx = dx - D / 2;
                 }
             }
 
-            transformI.position = pointI.pos + dx;
+            pointI.pos += dx;
         }
 
         //resolveCollisions
 
         // use previous position to compute next velocity
-        foreach (GameObject item in listPoint)
+        foreach (Point pointI in listPoint)
         {
-            Point pointI = item.GetComponent<Point>();
+
+            // Clamp
+            if (pointI.pos.y < 0)
+            {
+                pointI.pos += Vector3.up * (new Vector3(pointI.pos.x, 0) - pointI.pos).magnitude * foutside * (Time.fixedDeltaTime * Time.fixedDeltaTime) / pointI.m;
+            }
+            if (pointI.pos.y > boundaryY)
+            {
+                pointI.pos += Vector3.down * (new Vector3(pointI.pos.x, boundaryY) - pointI.pos).magnitude * foutside * (Time.fixedDeltaTime * Time.fixedDeltaTime) / pointI.m;
+            }
+            if (pointI.pos.x < 0)
+            {
+                pointI.pos += Vector3.right * (new Vector3(0, pointI.pos.y) - pointI.pos).magnitude * foutside * (Time.fixedDeltaTime * Time.fixedDeltaTime) / pointI.m;
+            }
+            if (pointI.pos.x > boundaryX)
+            {
+                pointI.pos += Vector3.left * (new Vector3(boundaryX, pointI.pos.y) - pointI.pos).magnitude * foutside * (Time.fixedDeltaTime * Time.fixedDeltaTime) / pointI.m;
+            }
+
+            pointI.transform.position = pointI.pos;
+
             pointI.v = (pointI.pos - pointI.prevPos) / Time.fixedDeltaTime;
         }
 
@@ -229,40 +220,42 @@ public class SpatialHash2D
     public float cellSize;
 
     //Buckets: store actual bullets
-    public Dictionary<Tuple<int, int>, List<GameObject>> buckets;
+    public Dictionary<Tuple<int, int>, List<Point>> buckets;
     //Max bucket size, avoid calculated bucket out of range bug (see below)
     public int bucketSize;
     //Init the grid
     public SpatialHash2D(float sceneWidth, float sceneHeight, float cellSize)
     {
-        this.buckets = new Dictionary<Tuple<int, int>, List<GameObject>>();
+        this.buckets = new Dictionary<Tuple<int, int>, List<Point>>();
         this.cellSize = cellSize;
         this.bucketSize = buckets.Count;
+        this.sceneHeight = sceneHeight;
+        this.sceneWidth = sceneWidth;
     }
 
     //Insert an Object to the bucket
-    public void Insert(GameObject obj)
+    public void Insert(Point obj)
     {
         Tuple<int, int> cellIDs = GetBucketIDs(obj);
         if (!buckets.ContainsKey(cellIDs))
         {
-            this.buckets.Add(cellIDs, new List<GameObject>());
+            this.buckets.Add(cellIDs, new List<Point>());
         }
         this.buckets[cellIDs].Add(obj);
     }
 
     // Get the Dictionary Keys of Buckets that may contain bullets that OVERLAPS obj
-    private Tuple<int, int> GetBucketIDs(GameObject obj)
+    private Tuple<int, int> GetBucketIDs(Point obj)
     {
-        Vector3Int vecInt = Vector3Int.FloorToInt(obj.transform.position);
-        Tuple<int, int> bucketIDs = Tuple.Create(vecInt.x, vecInt.y);
-
-        return bucketIDs;
+        return Tuple.Create(
+            Convert.ToInt32(Mathf.Floor((obj.pos.x + sceneWidth) / cellSize)),
+            Convert.ToInt32(Mathf.Floor((obj.pos.y + sceneHeight) / cellSize))
+        );
     }
 
-    public List<GameObject> GetNearby(GameObject obj)
+    public List<Point> GetNearby(Point obj)
     {
-        List<GameObject> objects = new List<GameObject>();
+        List<Point> point = new List<Point>();
 
         Tuple<int, int> cellIDs = GetBucketIDs(obj);
 
@@ -270,12 +263,23 @@ public class SpatialHash2D
         {
             for (int x = cellIDs.Item1 - 1; x <= cellIDs.Item1 + 1; x++)
             {
-                if (buckets.TryGetValue(Tuple.Create(x, y), out List<GameObject> values))
+                if (buckets.TryGetValue(Tuple.Create(x, y), out List<Point> values))
                 {
-                    objects.AddRange(values);
+                    foreach (Point other in values)
+                    {
+                        if (other == obj)
+                        {
+                            continue;
+                        }
+
+                        if (Vector3.Distance(obj.pos, other.pos) <= cellSize)
+                        {
+                            point.AddRange(values);
+                        }
+                    }
                 }
             }
         }
-        return objects;
+        return point;
     }
 }
